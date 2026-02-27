@@ -1,8 +1,5 @@
 # Silent Sentry — Autonomous UGV Navigation in Contested Environments
 
-> **IEEE Paper Companion Repository**  
-> Thar Desert corridor simulation • ROS 2 Jazzy • Gazebo Harmonic
-
 ---
 
 ## Abstract
@@ -111,15 +108,3 @@ Output PNGs will appear in `paper_data/final_graphs/`.
 
 ---
 
-## Citation
-
-```bibtex
-@inproceedings{pachauri2026silentsentry,
-  title     = {Silent Sentry: Emission-Controlled Autonomous UGV Navigation
-               in Unstructured Desert Corridors},
-  author    = {Pachauri, Aditya and ...},
-  booktitle = {Proceedings of the IEEE International Conference on Robotics
-               and Automation (ICRA)},
-  year      = {2026}
-}
-```
