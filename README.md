@@ -8,7 +8,7 @@ Silent Sentry presents a multi-layer autonomous navigation stack for Unmanned Gr
 
 - **EMCON Controller** — Emission-Control-aware command arbitration that suppresses unnecessary RF/sensor emissions during adversarial exposure windows
 - **SBLP Planner** — Scenario-Based Local Planner that switches trajectory primitives based on terrain class (sand dune, rock field, open corridor)
-- **VLM Costmap** — Vision-Language Model costmap layer that annotates traversability using zero-shot scene understanding (no fine-tuning required)
+- **VLM Costmap** — Vision-Language Model costmap layer that annotates traversability using zero-shot scene understanding (no fine tuning required)
 
 Experiments are conducted in a photorealistic Gazebo Harmonic simulation of the Thar Desert corridor (1735 × 4144 m heightmap, 187 vegetation models).
 
