@@ -1,0 +1,39 @@
+adaptive_scan_matcher:
+  ros__parameters:
+    # Frame configuration
+    base_frame: "base_footprint"
+    odom_frame: "odom"
+    scan_topic: "/scan"
+    
+    # ICP parameters
+    max_iterations: 15
+    epsilon_xy: 0.0001      # Convergence threshold for position (m)
+    epsilon_theta: 0.0001   # Convergence threshold for orientation (rad)
+    max_correspondence_distance: 0.3  # Maximum distance for point correspondence (m)
+    outlier_threshold: 0.05  # Outlier rejection threshold (m)
+    
+    # Scan preprocessing
+    min_laser_range: 0.1    # Minimum valid laser range (m)
+    max_laser_range: 10.0   # Maximum valid laser range (m)
+    downsample_factor: 2    # Downsample every nth point
+    
+    # Quality assessment
+    min_feature_threshold: 10    # Minimum features required for reliable matching
+    quality_threshold: 0.3       # Minimum quality for high-confidence matching
+    fallback_to_wheel_odom: true # Use wheel odometry when scan quality is poor
+    
+    # Environment-specific tuning
+    # For indoor environments:
+    # - Lower max_correspondence_distance (0.2)
+    # - Higher feature requirements (15)
+    # - More aggressive downsampling (3)
+    
+    # For outdoor environments:
+    # - Higher max_correspondence_distance (0.5)
+    # - Lower feature requirements (5)
+    # - Less downsampling (1-2)
+    
+    # For mixed environments:
+    # - Adaptive thresholds based on feature density
+    # - Dynamic correspondence distance
+    # - Quality-based parameter adjustment

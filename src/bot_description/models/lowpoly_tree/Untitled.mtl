@@ -1,0 +1,22 @@
+# Blender 5.0.1 MTL File: 'None'
+# www.blender.org
+
+newmtl Branches0025_1_S
+Ns 44.099991
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1000.000000
+illum 2
+map_Kd textures/Branches0025_1_S_diffuse.png
+map_d textures/Branches0025_1_S_diffuse.png
+
+newmtl bark.001
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1000.000000
+d 1.000000
+illum 2
+map_Kd textures/bark.001_diffuse.png

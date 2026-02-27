@@ -1,0 +1,116 @@
+ekf_filter_node:
+  ros__parameters:
+    # Basic EKF settings - Optimized for real-time sensor fusion
+    frequency: 50.0                    # Match wheel odometry publish rate (50 Hz)
+    sensor_timeout: 0.2                # Increased to 200ms for better synchronization
+    two_d_mode: true                   # 2D robot (no flying)
+    
+    # Time synchronization settings - CRITICAL FOR TF
+    predict_to_current_time: true      # Predict to current time for better sync
+    smooth_lagged_data: true           # Smooth out-of-order sensor data
+    transform_time_offset: 0.0         # NO offset - use exact timestamps
+    
+    # Map frame settings  
+    map_frame: map
+    odom_frame: odom  
+    base_link_frame: base_footprint       # Match URDF - should be base_link, not base_footprint
+    world_frame: odom                 # Start with odom frame
+    
+    # Transform settings - ENABLE TF PUBLISHING
+    publish_tf: true                  # Robot_localization will publish odom→base_link TF
+    transform_time_offset: 0.0        # NO offset - let EKF handle timing
+    transform_timeout: 0.1            # 100ms timeout for transform lookup
+    print_diagnostics: true            # Enable debug output
+    debug: false
+    
+    # Initial estimate covariance - ALL VALUES MUST BE FLOAT
+    initial_estimate_covariance: [1.0e-9, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                  0.0,    1.0e-9, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                  0.0,    0.0,    1.0e-9, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                  0.0,    0.0,    0.0,    1.0e-9, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                  0.0,    0.0,    0.0,    0.0,    1.0e-9, 0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                  0.0,    0.0,    0.0,    0.0,    0.0,    1.0e-9, 0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0e-9, 0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0e-9, 0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0e-9, 0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1.0e-9,  0.0,     0.0,     0.0,    0.0,    0.0,
+                                  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     1.0e-9,  0.0,     0.0,    0.0,    0.0,
+                                  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     1.0e-9,  0.0,    0.0,    0.0,
+                                  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     1.0e-9, 0.0,    0.0,
+                                  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    1.0e-9, 0.0,
+                                  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    1.0e-9]
+
+    # ===== ODOMETRY INPUT (from wheel encoders) =====
+    odom0: /odom
+    odom0_config: [true,  true,  false,  # x, y, z position (USE - wheel encoders are primary position source)
+                   false, false, true,   # roll, pitch, yaw orientation (USE yaw from bicycle kinematics) 
+                   true,  true,  false,  # x_dot, y_dot, z_dot velocity (USE - wheel encoders accurate for velocity)
+                   false, false, true,   # roll_dot, pitch_dot, yaw_dot (USE yaw_dot from bicycle model)
+                   false, false, false] # x_ddot, y_ddot, z_ddot acceleration (let IMU handle acceleration)
+    
+    odom0_queue_size: 10
+    odom0_nodelay: true                # Process immediately for low latency
+    odom0_differential: false          # Use absolute measurements
+    odom0_relative: false              # Wheel odometry provides absolute pose
+    
+    # ===== IMU INPUT (from inertial sensor) =====  
+    imu0: /imu
+    imu0_config: [false, false, false,   # x, y, z position (N/A for IMU)
+                  false, false, false,   # roll, pitch, yaw orientation (Gazebo IMU may drift - disable for now)
+                  false, false, false,   # x_dot, y_dot, z_dot velocity (N/A for IMU)
+                  false, false, true,    # roll_dot, pitch_dot, yaw_dot (USE yaw_dot - angular velocity from gyro)
+                  true,  true,  false]   # x_ddot, y_ddot, z_ddot acceleration (USE x,y - helps with dynamics)
+                  
+    imu0_queue_size: 10
+    imu0_nodelay: true                 # Process immediately for low latency  
+    imu0_differential: false           # Use absolute IMU measurements
+    imu0_relative: true                # IMU provides relative measurements
+    imu0_remove_gravitational_acceleration: true  # Remove gravity from accelerometer
+    
+    # IMU rejection thresholds (reject outlier data)
+    imu0_linear_acceleration_rejection_threshold: 0.8  # Reject high accelerations
+    imu0_angular_velocity_rejection_threshold: 1.57    # Reject high angular rates
+
+    # ===== LASER ODOMETRY INPUT (from custom laser scan matching) =====
+    odom1: /odom_laser
+    odom1_config: [true,  true,  false,  # x, y, z position (USE - laser odometry good for position correction)
+                   false, false, true,   # roll, pitch, yaw orientation (USE yaw - laser odometry provides good heading)
+                   true,  true,  false,  # x_dot, y_dot, z_dot velocity (USE - laser odometry provides velocity estimates)
+                   false, false, false,  # roll_dot, pitch_dot, yaw_dot (let wheel odom and IMU handle angular rates)
+                   false, false, false] # x_ddot, y_ddot, z_ddot acceleration (not provided by laser odometry)
+    
+    odom1_queue_size: 10
+    odom1_nodelay: true                # Process immediately for low latency
+    odom1_differential: true           # Use differential measurements (relative motion between scans)
+    odom1_relative: true               # Laser odometry provides relative measurements
+    
+    # Laser odometry rejection thresholds (reject outlier data)
+    odom1_pose_rejection_threshold: 2.0      # Reject large position jumps (meters)
+    odom1_twist_rejection_threshold: 0.2     # Reject high velocity estimates (m/s)
+
+    # ===== PROCESS NOISE COVARIANCE - ALL VALUES MUST BE FLOAT =====
+    # Higher values = trust sensors less, lower = trust process model less
+    # Reduced noise for wheel odometry-driven variables, moderate for IMU-assisted ones
+    process_noise_covariance: [0.002, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # x (trust wheel odom)
+                               0.0,    0.002, 0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # y (trust wheel odom)
+                               0.0,    0.0,    0.01,  0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # z (not used)
+                               0.0,    0.0,    0.0,    0.01,  0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # roll (not used)
+                               0.0,    0.0,    0.0,    0.0,    0.01,  0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # pitch (not used)
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.003, 0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # yaw (bicycle model)
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.002, 0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # vx (trust wheel odom)
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0025, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.004, 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.001, 0.0,    0.0,    0.0,    0.0,    0.0,
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.001, 0.0,    0.0,    0.0,    0.0,
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.002, 0.0,    0.0,    0.0,
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.001, 0.0,    0.0,
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.001, 0.0,
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0015]
+
+    # Advanced EKF settings - ALL VALUES MUST BE FLOAT
+    alpha: 0.001
+    kappa: 0.0
+    beta: 2.0
+    use_control: false                 # Don't use control input
+    stamped_control: false
+    control_timeout: 0.2

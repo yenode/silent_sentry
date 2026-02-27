@@ -1,0 +1,53 @@
+<launch>
+    <!-- ── Vegetation control ───────────────────────────────────────────────
+         num_vegetation : 0-1790  (default=1790, i.e. full world)
+         Each instance costs ~5-15 MB RAM.  Use 0 for bare-terrain nav tests.
+         Examples:
+           ros2 launch bot_description gazebo.launch.xml num_vegetation:=0
+           ros2 launch bot_description gazebo.launch.xml num_vegetation:=200
+    ── -->
+    <arg name="num_vegetation" default="1790"
+         description="Vegetation instances to load (0-1790). Lower = less RAM." />
+
+    <let name="urdf_path" value="$(find-pkg-share bot_description)/urdf/bot.urdf.xacro" />
+    <let name="gazebo_config_path" value="$(find-pkg-share bot_description)/config/gazebo_bridge.yaml" />
+    <let name="pkg_share" value="$(find-pkg-share bot_description)" />
+
+    <!-- Trim vegetation in the SDF before Gazebo starts -->
+    <let name="world_path"
+         value="$(command 'python3 $(var pkg_share)/scripts/trim_vegetation.py $(var num_vegetation) $(var pkg_share)/worlds/thar_desert.sdf')" />
+
+    <!-- Gazebo resource paths - bot_description share has worlds/, models/, textures -->
+    <set_env name="GZ_SIM_RESOURCE_PATH"
+             value="$(var pkg_share):$(var pkg_share)/models" />
+    <!-- gz_ros2_control plugin lives here in Jazzy -->
+    <set_env name="GZ_SIM_SYSTEM_PLUGIN_PATH" value="/opt/ros/jazzy/lib" />
+
+    <node pkg="robot_state_publisher" exec="robot_state_publisher">
+        <param name="robot_description" value="$(command 'xacro $(var urdf_path)')" />
+        <param name="use_sim_time" value="true" />
+    </node>
+
+    <include file="$(find-pkg-share ros_gz_sim)/launch/gz_sim.launch.py">
+        <arg name="gz_args" value="-r --headless-rendering $(var world_path)" />
+        <arg name="on_exit_shutdown" value="true" />
+    </include>
+
+    <!-- Spawn robot at shadow-region centroid (elev=56m, +0.5m clearance) -->
+    <node pkg="ros_gz_sim" exec="create"
+          args="-topic robot_description -name autobot -x -50.5 -y -23.2 -z 56.5" />
+
+    <node pkg="ros_gz_bridge" exec="parameter_bridge">
+        <param name="config_file" value="$(var gazebo_config_path)" />
+        <param name="use_sim_time" value="true" />
+    </node>
+
+    <include file="$(find-pkg-share bot_controller)/launch/bot_controller.launch.py">
+        <arg name="use_sim_time" value="True" />
+    </include>
+
+    <node pkg="rviz2" exec="rviz2"
+          args="-d $(find-pkg-share bot_description)/config/gz.rviz"
+          output="screen" />
+
+</launch>

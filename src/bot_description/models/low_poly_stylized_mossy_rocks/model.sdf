@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="low_poly_stylized_mossy_rocks">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://low_poly_stylized_mossy_rocks/Untitled.obj</uri>
+            <scale>0.000412 0.000412 0.000412</scale>
+          </mesh>
+        </geometry>
+      </visual>
+                  <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://low_poly_stylized_mossy_rocks/Untitled.obj</uri>
+            <scale>0.000412 0.000412 0.000412</scale>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

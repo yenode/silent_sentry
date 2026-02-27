@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="stylized_bush_low_poly">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://stylized_bush_low_poly/Untitled.obj</uri>
+            <scale>0.692861 0.692861 0.692861</scale>
+          </mesh>
+        </geometry>
+      </visual>
+                  <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://stylized_bush_low_poly/Untitled.obj</uri>
+            <scale>0.692861 0.692861 0.692861</scale>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

@@ -1,0 +1,64 @@
+enhanced_imu_processor:
+  ros__parameters:
+    # Topic configuration
+    imu_topic: "/imu/data"
+    temperature_topic: "/imu/temperature"
+    base_frame: "base_footprint"
+    imu_frame: "imu_link"
+    
+    # Bias estimation parameters
+    bias_estimation_samples: 1000       # Number of samples for bias estimation
+    bias_update_rate: 0.1              # Hz - Rate of bias updates
+    temperature_compensation: true      # Enable temperature compensation
+    
+    # Static bias values (rad/s for gyro, m/s^2 for accel)
+    # These can be determined from initial calibration
+    static_bias_gyro_x: 0.0
+    static_bias_gyro_y: 0.0
+    static_bias_gyro_z: 0.0
+    static_bias_accel_x: 0.0
+    static_bias_accel_y: 0.0
+    static_bias_accel_z: 0.0
+    
+    # Noise characterization (typical values for consumer IMUs)
+    gyro_noise_density: 0.01       # rad/s/sqrt(Hz) - Angular rate white noise
+    gyro_random_walk: 0.001        # rad/s^2/sqrt(Hz) - Angular rate random walk
+    accel_noise_density: 0.1       # m/s^2/sqrt(Hz) - Acceleration white noise
+    accel_random_walk: 0.01        # m/s^3/sqrt(Hz) - Acceleration random walk
+    
+    # Calibration thresholds
+    stationary_threshold_gyro: 0.02    # rad/s - Max angular velocity for stationary
+    stationary_threshold_accel: 0.5    # m/s^2 - Max accel deviation for stationary
+    stationary_duration_threshold: 2.0 # seconds - Min time stationary before calibrating
+    
+    # Temperature compensation coefficients (bias change per degree C)
+    temp_coeff_gyro_x: 0.001
+    temp_coeff_gyro_y: 0.001
+    temp_coeff_gyro_z: 0.001
+    temp_coeff_accel_x: 0.01
+    temp_coeff_accel_y: 0.01
+    temp_coeff_accel_z: 0.01
+    reference_temperature: 25.0        # Reference temperature for compensation
+    
+    # IMU-specific tuning notes:
+    # 
+    # For MPU6050/9250:
+    # - gyro_noise_density: 0.005
+    # - accel_noise_density: 0.05
+    # - Higher temperature sensitivity
+    # 
+    # For BMI160:
+    # - gyro_noise_density: 0.007
+    # - accel_noise_density: 0.08
+    # - Better temperature stability
+    # 
+    # For LSM6DS3:
+    # - gyro_noise_density: 0.004
+    # - accel_noise_density: 0.06
+    # - Good overall performance
+    #
+    # Calibration procedure:
+    # 1. Keep robot stationary for 5+ minutes
+    # 2. Record bias values from /imu/bias_estimate
+    # 3. Update static_bias_* parameters
+    # 4. Test temperature compensation over operating range

@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="palm_tree_realistic">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://palm_tree_realistic/Untitled.obj</uri>
+            <scale>0.837849 0.837849 0.837849</scale>
+          </mesh>
+        </geometry>
+      </visual>
+                  <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://palm_tree_realistic/Untitled.obj</uri>
+            <scale>0.837849 0.837849 0.837849</scale>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

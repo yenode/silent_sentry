@@ -1,0 +1,37 @@
+# Enhanced Wheel Odometry Configuration
+enhanced_wheel_odometry:
+  ros__parameters:
+    # Robot geometry parameters
+    wheelbase: 0.9                    # Distance between front and rear axles (m)
+    wheel_radius: 0.175               # Wheel radius (m)
+    track_width: 0.67                 # Distance between left and right wheels (m)
+    
+    # Frame configuration
+    odom_frame: "odom"
+    base_frame: "base_footprint"
+    
+    # Joint names (adjust based on your URDF)
+    left_wheel_joint: "base_back_left_wheel_joint"
+    right_wheel_joint: "base_back_right_wheel_joint"
+    left_steering_joint: "base_front_left_steering_joint"
+    right_steering_joint: "base_front_right_steering_joint"
+    
+    # Publishing configuration
+    publish_rate: 50.0                # Hz
+    
+    # Enhanced filtering parameters
+    velocity_filter_alpha: 0.2        # Low-pass filter coefficient (0.0-1.0, lower = more filtering)
+    max_wheel_acceleration: 3.0       # Maximum realistic wheel acceleration (m/s²)
+    deadzone_threshold: 0.003         # Velocity deadzone to eliminate encoder noise (m/s)
+    
+    # Slip detection parameters
+    slip_detection_enabled: true
+    slip_threshold_velocity: 0.05     # Velocity threshold for slip detection (m/s)
+    slip_threshold_acceleration: 2.0  # Acceleration threshold for slip detection (m/s²)
+    slip_recovery_time: 1.0           # Time to wait before declaring slip recovery (seconds)
+    
+    # Covariance parameters (tuned for your robot)
+    base_position_variance: 0.005     # Base position uncertainty (m²)
+    speed_variance_factor: 0.03       # Speed-dependent uncertainty coefficient
+    steering_variance_factor: 0.08    # Steering-dependent uncertainty coefficient
+    acceleration_variance_factor: 0.02 # Acceleration-dependent uncertainty coefficient

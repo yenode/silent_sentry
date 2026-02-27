@@ -1,0 +1,88 @@
+version: "3.9"
+
+# Multi-agent Silent Sentry — 3 UGVs in the Thar corridor
+# Each agent runs the full stack; Gazebo server runs on agent-1
+
+networks:
+  sentry_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+services:
+
+  # ── Gazebo Server (shared simulation) ─────────────────────────────────────
+  gazebo_server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: gz_server
+    environment:
+      - ROS_DOMAIN_ID=42
+      - GZ_SIM_RESOURCE_PATH=/ws/world
+    volumes:
+      - ../world:/ws/world:ro
+    command: >
+      bash -c "source /ws/install/setup.bash &&
+               gz sim -s -r --headless-rendering /ws/world/thar_corridor.sdf"
+    networks:
+      sentry_net:
+        ipv4_address: 172.30.0.10
+
+  # ── Agent 1 (Lead UGV) ────────────────────────────────────────────────────
+  agent_1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sentry_agent_1
+    depends_on: [gazebo_server]
+    environment:
+      - ROS_DOMAIN_ID=42
+      - AGENT_ID=1
+      - AGENT_ROLE=lead
+    command: >
+      bash -c "source /ws/install/setup.bash &&
+               ros2 launch emcon_controller silent_sentry.launch.xml
+               agent_id:=1 role:=lead"
+    networks:
+      sentry_net:
+        ipv4_address: 172.30.0.11
+
+  # ── Agent 2 (Flank UGV) ───────────────────────────────────────────────────
+  agent_2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sentry_agent_2
+    depends_on: [gazebo_server]
+    environment:
+      - ROS_DOMAIN_ID=42
+      - AGENT_ID=2
+      - AGENT_ROLE=flank
+    command: >
+      bash -c "source /ws/install/setup.bash &&
+               ros2 launch emcon_controller silent_sentry.launch.xml
+               agent_id:=2 role:=flank"
+    networks:
+      sentry_net:
+        ipv4_address: 172.30.0.12
+
+  # ── Agent 3 (Rear Scout) ──────────────────────────────────────────────────
+  agent_3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sentry_agent_3
+    depends_on: [gazebo_server]
+    environment:
+      - ROS_DOMAIN_ID=42
+      - AGENT_ID=3
+      - AGENT_ROLE=rear_scout
+    command: >
+      bash -c "source /ws/install/setup.bash &&
+               ros2 launch emcon_controller silent_sentry.launch.xml
+               agent_id:=3 role:=rear_scout"
+    networks:
+      sentry_net:
+        ipv4_address: 172.30.0.13

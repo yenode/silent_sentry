@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="low_poly_tree">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://low_poly_tree/Untitled.obj</uri>
+            <scale>0.002402 0.002402 0.002402</scale>
+          </mesh>
+        </geometry>
+      </visual>
+                  <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://low_poly_tree/Untitled.obj</uri>
+            <scale>0.002402 0.002402 0.002402</scale>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

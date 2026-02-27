@@ -1,0 +1,156 @@
+### Enhanced EKF Configuration for Multi-Sensor Fusion ###
+#
+# This configuration optimizes the robot_localization EKF for:
+# - Enhanced wheel odometry with slip detection
+# - Adaptive scan matching with quality assessment  
+# - IMU with bias compensation and temperature correction
+# - Dynamic sensor authority based on confidence metrics
+#
+
+ekf_filter_node:
+  ros__parameters:
+    # Basic configuration
+    frequency: 50.0                     # 50 Hz update rate
+    sensor_timeout: 0.2                 # 200ms timeout for sensor data
+    two_d_mode: true                    # 2D navigation mode
+    map_frame: map                      # Map frame (for SLAM integration)
+    odom_frame: odom                    # Odometry frame
+    base_link_frame: base_footprint     # Robot base frame
+    world_frame: odom                   # World frame for odometry mode
+    
+    # Transform configuration
+    publish_tf: true                    # Publish odom→base_footprint transform
+    transform_time_offset: 0.0          # No transform offset
+    transform_timeout: 0.0              # No transform timeout
+    print_diagnostics: true             # Enable diagnostic output
+    debug: false                        # Disable debug output (too verbose)
+    debug_out_file: /tmp/ekf_debug.txt  # Debug output file
+    
+    # Process noise covariance (Q matrix)
+    # Represents uncertainty in the robot's motion model
+    process_noise_covariance: [
+      0.05,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # x
+      0.0,    0.05,   0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # y
+      0.0,    0.0,    0.06,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # z (not used in 2D)
+      0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # roll (not used)
+      0.0,    0.0,    0.0,    0.0,    0.03,   0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # pitch (not used)
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.06,   0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # yaw
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.025,   0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # vx
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.025,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # vy
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.06,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # vz (not used)
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.02,   0.0,    0.0,    0.0,    0.0,    0.0,   # vroll (not used)
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.02,   0.0,    0.0,    0.0,    0.0,   # vpitch (not used)
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.02,   0.0,    0.0,    0.0,   # vyaw
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,   # ax
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,   # ay
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.015] # ayaw
+    
+    # Initial estimate error covariance (P matrix)
+    # Represents initial uncertainty in the state estimate
+    initial_estimate_covariance: [
+      1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # x
+      0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # y
+      0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # z
+      0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # roll
+      0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # pitch
+      0.0,    0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # yaw
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-9,    0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # vx
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     1e-9,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # vy
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,   # vz
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,   # vroll
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,   # vpitch
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,   # vyaw
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,   # ax
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,   # ay
+      0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-9]  # ayaw
+    
+    # Sensor configurations
+    # Format: [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, ayaw]
+    
+    # Corrected wheel odometry (speed from encoders + direction from scan matching)
+    odom0: /wheel_odometry/odom_corrected
+    odom0_config: [false, false, false,    # Position (not used)
+                   false, false, false,    # Orientation (not used)
+                   true,  false,  false,   # Velocity (vx only - magnitude from encoders, direction from scan matching)
+                   false, false, false,    # Angular velocity (not from wheels)
+                   false, false, false]    # Acceleration (not measured)
+    odom0_queue_size: 5
+    odom0_nodelay: false
+    odom0_differential: false
+    odom0_relative: false
+    odom0_pose_rejection_threshold: 5.0      # Reject large pose jumps
+    odom0_twist_rejection_threshold: 1.0     # Reject large velocity jumps
+    
+    # Adaptive scan matching odometry (position and orientation source only)
+    # Velocity direction is already used in corrected wheel odometry
+    odom1: /scan_matching_odometry/odom
+    odom1_config: [true,  true,  false,     # Position (primary source)
+                   false, false, true,      # Orientation (yaw only)
+                   false, false, false,     # Velocity (used only for direction correction)
+                   false, false, true,      # Angular velocity (yaw rate)
+                   false, false, false]     # Acceleration (not measured)
+    odom1_queue_size: 5
+    odom1_nodelay: false
+    odom1_differential: false                 
+    odom1_relative: false
+    odom1_pose_rejection_threshold: 2.0      # More sensitive to scan matching jumps
+    odom1_twist_rejection_threshold: 0.5
+    
+    # Enhanced IMU data (angular velocity only - no magnetometer)
+    # Using scan matching for yaw orientation instead of noisy magnetometer
+    imu0: /imu/data_corrected
+    imu0_config: [false, false, false,      # Position (not measured)
+                  false, false, false,      # Orientation (disabled - using scan matching instead)
+                  false, false, false,      # Velocity (not directly measured)
+                  false, false, true,       # Angular velocity (yaw rate from gyro - reliable)
+                  false, false, false]      # Acceleration (can be enabled if needed)
+    imu0_queue_size: 5
+    imu0_nodelay: false
+    imu0_differential: false
+    imu0_relative: true                      # Use relative measurements
+    imu0_pose_rejection_threshold: 0.8       # Sensitive to orientation jumps
+    imu0_twist_rejection_threshold: 0.8
+    imu0_linear_acceleration_rejection_threshold: 0.8
+    
+    # Remove gravitational acceleration from IMU
+    imu0_remove_gravitational_acceleration: true
+    
+    # Advanced filtering options
+    use_control: false                       # Don't use control input
+    stamped_control: false
+    control_timeout: 0.2
+    control_config: [true, false, false, false, false, true]  # If using control
+    
+    # Smoothing and prediction
+    smooth_lagged_data: true                 # Smooth delayed sensor data
+    history_length: 3.0                     # Keep 3 seconds of history for smoothing
+    
+    # Sensor timeout handling
+    reset_on_time_jump: true                 # Reset filter on time jumps (simulation)
+    
+    # Dynamic process noise (can be adjusted based on motion)
+    dynamic_process_noise_covariance: false  # Disable for now (advanced feature)
+    
+    # Mahalanobis distance threshold for outlier rejection
+    # This helps reject sensor measurements that are statistically unlikely
+    mahalanobis_threshold: 3.0               # 3-sigma threshold
+    
+    # Advanced configuration for sensor authority balancing
+    # Note: These are conceptual - robot_localization doesn't directly support
+    # dynamic sensor weighting, but the enhanced sensors provide quality metrics
+    # that can be used by external monitoring systems
+    
+    # Monitoring topics (for external sensor authority management):
+    # - /enhanced_wheel_odometry/slip_status (slip detection)
+    # - /enhanced_wheel_odometry/confidence (wheel odometry confidence)
+    # - /scan_matching/quality (scan matching quality)
+    # - /scan_matching/confidence (scan matching confidence)
+    # - /imu/calibration_status (IMU calibration status)
+    # - /imu/bias_estimate (IMU bias estimates)
+    
+    # Performance tuning notes:
+    # 1. Increase process noise for unstable environments
+    # 2. Decrease sensor rejection thresholds for noisy sensors
+    # 3. Use differential mode for position sources that drift
+    # 4. Enable debug output for tuning sensor weights
+    # 5. Monitor diagnostic topics for sensor health assessment
