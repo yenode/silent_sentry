@@ -23,6 +23,8 @@ target_include_directories(goal_to_path_bt_node PRIVATE
   include
 )
 
+target_compile_definitions(goal_to_path_bt_node PRIVATE BT_PLUGIN_EXPORT)
+
 ament_target_dependencies(goal_to_path_bt_node
   rclcpp
   behaviortree_cpp
