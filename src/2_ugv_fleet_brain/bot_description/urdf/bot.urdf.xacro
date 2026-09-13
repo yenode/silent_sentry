@@ -90,7 +90,7 @@
     <parent link="base_link"/>
     <child link="base_front_left_steering"/>
     <origin xyz="0.39 -0.265 -0.2075" rpy="-1.57079632679 0 0"/>
-    <limit lower="-0.2616" upper="0.2616" effort="500" velocity="1.0"/>
+    <limit lower="-0.2616" upper="0.2616" effort="100" velocity="1.0"/>
     <axis xyz="0 1 0"/>
   </joint>
 
@@ -123,7 +123,7 @@
     <parent link="base_link"/>
     <child link="base_front_right_steering"/>
     <origin xyz="0.39 0.265 -0.2075" rpy="-1.57079632679 0 0"/>
-    <limit lower="-0.2616" upper="0.2616" effort="500" velocity="1.0"/>
+    <limit lower="-0.2616" upper="0.2616" effort="100" velocity="1.0"/>
     <axis xyz="0 1 0"/>
   </joint>
   
@@ -767,17 +767,17 @@
     <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
       <joint_name>base_front_left_steering_joint</joint_name>
       <topic>/model/$(arg bot_name)/joint/base_front_left_steering_joint/cmd_pos</topic>
-      <p_gain>500.0</p_gain>
-      <i_gain>0.5</i_gain>
-      <d_gain>5.0</d_gain>
+      <p_gain>50.0</p_gain>
+      <i_gain>0.1</i_gain>
+      <d_gain>1.0</d_gain>
     </plugin>
 
     <plugin filename="gz-sim-joint-position-controller-system" name="gz::sim::systems::JointPositionController">
       <joint_name>base_front_right_steering_joint</joint_name>
       <topic>/model/$(arg bot_name)/joint/base_front_right_steering_joint/cmd_pos</topic>
-      <p_gain>500.0</p_gain>
-      <i_gain>0.5</i_gain>
-      <d_gain>5.0</d_gain>
+      <p_gain>50.0</p_gain>
+      <i_gain>0.1</i_gain>
+      <d_gain>1.0</d_gain>
     </plugin>
 
     <plugin filename="gz-sim-joint-controller-system" name="gz::sim::systems::JointController">
@@ -850,14 +850,14 @@
          wheel_normal_force corrected to actual CG-based static load.  -->
     <plugin filename="gz-sim-wheel-slip-system" name="gz::sim::systems::WheelSlip">
       <wheel link_name="base_front_left_wheel">
-        <slip_compliance_lateral>0.15</slip_compliance_lateral>
-        <slip_compliance_longitudinal>0.12</slip_compliance_longitudinal>
+        <slip_compliance_lateral>0.005</slip_compliance_lateral>
+        <slip_compliance_longitudinal>0.005</slip_compliance_longitudinal>
         <wheel_normal_force>43</wheel_normal_force>
         <wheel_radius>0.175</wheel_radius>
       </wheel>
       <wheel link_name="base_front_right_wheel">
-        <slip_compliance_lateral>0.15</slip_compliance_lateral>
-        <slip_compliance_longitudinal>0.12</slip_compliance_longitudinal>
+        <slip_compliance_lateral>0.005</slip_compliance_lateral>
+        <slip_compliance_longitudinal>0.005</slip_compliance_longitudinal>
         <wheel_normal_force>43</wheel_normal_force>
         <wheel_radius>0.175</wheel_radius>
       </wheel>

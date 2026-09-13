@@ -17,19 +17,8 @@
       </bullet>
     </physics>
 
-    <!-- Engine selected HERE, not via GZ_SIM_PHYSICS_ENGINE. The env var in
-         world_only.launch.xml was not reaching the gz server, so gz silently
-         fell back to its default (dartsim + ODE collision), which the entity
-         inspector confirmed. The <engine><filename> child of the Physics
-         system plugin is the highest-precedence, SDF-local selection and
-         removes the env-propagation dependency. Unversioned name resolves to
-         libgz-physics7-bullet-featherstone-plugin.so on Harmonic. -->
     <plugin filename="gz-sim-physics-system"
-            name="gz::sim::systems::Physics">
-      <engine>
-        <filename>gz-physics-bullet-featherstone-plugin</filename>
-      </engine>
-    </plugin>
+            name="gz::sim::systems::Physics"/>
     <plugin filename="gz-sim-user-commands-system"
             name="gz::sim::systems::UserCommands"/>
     <plugin filename="gz-sim-scene-broadcaster-system"
