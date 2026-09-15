@@ -39,6 +39,18 @@ public:
       return BT::NodeStatus::FAILURE;
     }
 
+    // Check if goal has changed. If not, return the cached path to prevent
+    // continuous action server preemption in BT PipelineSequence.
+    if (!first_time_ &&
+        std::abs(goal.pose.position.x - prev_goal_.pose.position.x) < 0.01 &&
+        std::abs(goal.pose.position.y - prev_goal_.pose.position.y) < 0.01) {
+      setOutput("output_path", cached_path_);
+      return BT::NodeStatus::SUCCESS;
+    }
+
+    prev_goal_ = goal;
+    first_time_ = false;
+
     std::shared_ptr<tf2_ros::Buffer> tf_buffer;
     std::string global_frame = goal.header.frame_id.empty() ? "map" : goal.header.frame_id;
     std::string robot_base_frame = "base_footprint";
@@ -73,6 +85,7 @@ public:
 
     if (!has_robot_pose) {
       path.poses.push_back(goal);
+      cached_path_ = path;
       setOutput("output_path", path);
       return BT::NodeStatus::SUCCESS;
     }
@@ -108,9 +121,15 @@ public:
       path.poses.push_back(pose);
     }
 
+    cached_path_ = path;
     setOutput("output_path", path);
     return BT::NodeStatus::SUCCESS;
   }
+
+private:
+  geometry_msgs::msg::PoseStamped prev_goal_;
+  nav_msgs::msg::Path cached_path_;
+  bool first_time_{true};
 };
 
 }  // namespace nav2_behavior_tree
