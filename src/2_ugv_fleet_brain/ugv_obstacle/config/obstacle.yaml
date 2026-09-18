@@ -11,7 +11,10 @@ ugv_obstacle_node:
     # collides with. Wheel radius is 0.175 m, so anything above ~0.3 m is a
     # genuine hazard rather than something the vehicle can drive over.
     tau_prior: 0.3         # height above a-priori DEM -> obstacle (m)
-    tau_local: 0.3         # local 3x3 neighbourhood jump -> obstacle (m)
+    tau_local: 0.5         # 0.3 → 0.5: dune slopes vary >0.3m naturally within
+                           # the 1.2m (3×0.4m) cell window; 0.5m catches vertical
+                           # obstacles (rocks, shrubs) while passing gradual terrain.
+                           # Active only when TRN confidence < 0.5 (see obstacle_core).
     # Extra tau_prior added when TRN confidence = 0. Lowered 0.6 -> 0.2 so the
     # detector stays cautious (keeps marking obstacles) precisely when
     # localization is shaky; the old 0.6 raised the threshold so much that

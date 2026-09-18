@@ -182,7 +182,20 @@ std::vector<uint8_t> ObstacleCore::classify(const Eigen::MatrixXf& pts_map,
       dem_obs = enough && (z - (h + dem_offset) > tau_prior_eff);
     }
 
-    mask[i] = (local_obs || dem_obs) ? 1 : 0;
+    // When the DEM prior is loaded and TRN confidence is reasonable (>0.5),
+    // the DEM-prior signal alone is sufficient: it correctly passes dune slopes
+    // (z ≈ dem → diff ≈ 0) while catching real obstacles that protrude above
+    // the known terrain surface. The local-jump signal fires false positives
+    // on ANY steep slope (dune face, hill crest) because it cannot distinguish
+    // gradual terrain from a vertical obstacle within its 3×3 cell window.
+    //
+    // When confidence is low or no DEM is available, fall back to the local-jump
+    // signal (with a relaxed tau_local) as a safety net.
+    if (has_dem() && conf > 0.5) {
+      mask[i] = dem_obs ? 1 : 0;
+    } else {
+      mask[i] = (local_obs || dem_obs) ? 1 : 0;
+    }
   }
   return mask;
 }
