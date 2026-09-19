@@ -170,11 +170,11 @@ controller_server:
       allow_reversing: true
 
       # --- Collision safety ---
+      # --- Collision safety ---
       # Stop before hitting: project the commanded velocity forward and halt if
-      # it would collide within this horizon. Gives smooth slow-then-stop
-      # instead of driving into a freshly-sensed obstacle.
+      # it would collide within this horizon.
       use_collision_detection: true
-      max_allowed_time_to_collision_up_to_carrot: 1.0   # 1.5 -> 1.0: less eager stop on distant/edge cost
+      max_allowed_time_to_collision_up_to_carrot: 0.4   # 1.0 -> 0.4: check 20cm ahead at 0.5m/s to avoid false stops on edge cost
 
       # RPP scales speed on curvature so sharp arcs slow down (smoother).
       use_regulated_linear_velocity_scaling: true
@@ -237,17 +237,12 @@ local_costmap:
         pointcloud:
           topic: /scan/obstacles
           max_obstacle_height: 2.0
-          min_obstacle_height: 0.1
+          min_obstacle_height: 0.2     # 0.1 -> 0.2: filter low ground clutter & chassis pitch tilt
           clearing: true
           marking: true
           data_type: "PointCloud2"
           raytrace_max_range: 15.0
-          # MUST be >= ugv_obstacle self_radius (1.0 m). Points inside that
-          # radius are filtered out of /scan/obstacles, but with
-          # raytrace_min_range 0.0 the clearing rays still swept through the
-          # blind zone and ERASED obstacles the robot was about to hit. Not
-          # clearing inside 1.0 m preserves that obstacle memory on approach.
-          raytrace_min_range: 1.0
+          raytrace_min_range: 0.0      # 1.0 -> 0.0: allow raytrace clearing to erase stale marks near footprint
           obstacle_max_range: 12.0
           obstacle_min_range: 0.0
       # static_layer: not used in local costmap (rolling window, obstacle-only).
