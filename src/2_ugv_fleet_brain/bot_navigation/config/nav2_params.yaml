@@ -146,108 +146,54 @@ controller_server:
       xy_goal_tolerance: 0.75
       yaw_goal_tolerance: 3.14
     FollowPath:
-      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.5
-      
-      # --- Lookahead Logic ---
-      # Logic: For a 1.4m robot, looking too close (0.6m) makes it twitchy. 
-      # Looking too far (3.0m) makes it cut corners.
-      lookahead_dist: 1.5          # Adjusted for your 0.9m wheelbase
-      min_lookahead_dist: 0.8       # Never look closer than ~1 wheelbase
-      max_lookahead_dist: 3.5
-      lookahead_time: 1.5           # Look 1.5s into the future
-      use_velocity_scaled_lookahead_dist: true
-      
-      # --- Ackermann: NEVER rotate in place ---
-      # Car-like robot cannot spin on the spot. If RPP rotates to heading it
-      # emits linear=0 + angular!=0; the ackermann controller then computes
-      # zero wheel velocity and the robot FREEZES (observed:
-      # "CMD: linear=0.00 -> corrected=0.00, angular=-0.08"). Must be false.
-      use_rotate_to_heading: false
+      # ---- APF Controller (replaces RPP + costmap collision detection) ----
+      # Reactive obstacle avoidance via Artificial Potential Fields.
+      # Reads raw 3D LiDAR and IMU directly — no costmap is consulted.
+      plugin: "bot_navigation::APFController"
 
-      # Reverse allowed (planner rarely emits it due to reverse_penalty=5.0),
-      # so RPP can execute the occasional reverse segment for tight extractions.
-      allow_reversing: true
+      # Attractive force: constant-magnitude pull toward goal
+      k_att: 1.0
 
-      # --- Collision safety ---
-      # --- Collision safety ---
-      # Stop before hitting: project the commanded velocity forward and halt if
-      # it would collide within this horizon.
-      use_collision_detection: true
-      max_allowed_time_to_collision_up_to_carrot: 0.4   # 1.0 -> 0.4: check 20cm ahead at 0.5m/s to avoid false stops on edge cost
+      # Repulsive force: inverse-square push from nearby obstacles
+      k_rep: 0.8
+      influence_distance: 4.0       # d0: obstacles beyond this are ignored (m)
 
-      # RPP scales speed on curvature so sharp arcs slow down (smoother).
-      use_regulated_linear_velocity_scaling: true
-      regulated_linear_scaling_min_radius: 3.36   # Your R_min
-      regulated_linear_scaling_min_speed: 0.4     # Minimum "crawl" speed so it doesn't get stuck
-      
-      # --- Cost Awareness ---
-      # DISABLED: with the over-marked terrain costmap the robot footprint sits
-      # in inflated cost almost everywhere, so cost-regulated scaling drove the
-      # commanded speed to ~0 (permanent crawl/freeze). Curvature regulation +
-      # inflation avoidance are enough; re-enable only after obstacle marking
-      # is cleaned up (C++ ugv_obstacle DEM-prior detector).
-      use_cost_regulated_linear_velocity_scaling: false
-      cost_scaling_dist: 0.6        # Start slowing down when 60cm from an obstacle
-      cost_scaling_gain: 1.0
-      inflation_cost_scaling_factor: 3.0
-      
-      # --- Ackermann Specifics ---
-      # Logic: If the path is too sharp, RPP will normally stop. 
-      # We want it to attempt the turn instead of timing out.
-      max_angular_accel: 1.5
-      # 0.5 -> 2.0: the map->odom TF from the factor-graph fuser arrives in
-      # bursts under load, producing gaps up to ~1.7 s ("Transform data too old
-      # when converting from map to odom"). 2.0 s rides over those gaps instead
-      # of aborting the controller.
+      # Slope avoidance: IMU pitch-based dune rejection
+      k_slope: 2.0
+      pitch_threshold: 0.21         # ~12 degrees — steeper = push backward
+
+      # Ackermann constraints
+      max_linear_vel: 0.5
+      min_turning_radius: 3.36      # R_min (m)
+      wheelbase: 0.9                # L (m)
+
+      # Sensor inputs (subscribed directly, not through costmap)
+      scan_topic: "/scan/points"    # raw 3D LiDAR
+      imu_topic: "/imu"             # IMU for pitch
+      obstacle_height_min: 0.15     # ignore ground (m in sensor frame)
+      obstacle_height_max: 2.0      # ignore high returns (m)
+      obstacle_range_max: 8.0       # ignore distant points (m)
+
       transform_tolerance: 2.0
-      
+
+# Local costmap: kept minimal. controller_server requires a costmap to exist,
+# but the APF controller ignores it entirely — obstacle avoidance comes from
+# direct sensor reads. No voxel_layer, no inflation, no obstacle marking.
 local_costmap:
   local_costmap:
     ros__parameters:
-      update_frequency: 5.0
-      publish_frequency: 5.0
-      transform_tolerance: 2.0   # 1.0 -> 2.0: absorb bursty map->odom TF (see FollowPath note)
+      update_frequency: 1.0         # low rate: costmap is vestigial
+      publish_frequency: 1.0
+      transform_tolerance: 2.0
       global_frame: odom
       robot_base_frame: base_footprint
       use_sim_time: true
       rolling_window: true
-      width: 10            # Increased for larger robot (1.4m x 0.8m)
-      height: 10           # Increased for larger robot
-      resolution: 0.1
-      # Remove robot_radius: 0.7
-      footprint: "[[-0.7, -0.4], [0.7, -0.4], [0.7, 0.4], [-0.7, 0.4]]"             # Conservative radius based on robot dimensions (1.4m x 0.8m)
-      plugins: ["voxel_layer", "inflation_layer"]
-      inflation_layer:
-        plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0      # Steeper cost scaling for better path planning
-        inflation_radius: 0.45      # 0.5 -> 0.45: just over robot half-width (0.4m) + margin
-      voxel_layer:
-        plugin: "nav2_costmap_2d::VoxelLayer"
-        enabled: true
-        publish_voxel_map: false   # 3D voxel viz is pure overhead; off = less CPU
-        origin_z: 0.0
-        z_resolution: 0.1
-        z_voxels: 16
-        max_obstacle_height: 2.0
-        mark_threshold: 0
-        # 3D obstacle cloud from ground_segmentation_node: slopes already
-        # removed, so only true obstacles (rocks/vegetation) are marked.
-        observation_sources: pointcloud
-        pointcloud:
-          topic: /scan/obstacles
-          max_obstacle_height: 2.0
-          min_obstacle_height: 0.2     # 0.1 -> 0.2: filter low ground clutter & chassis pitch tilt
-          clearing: true
-          marking: true
-          data_type: "PointCloud2"
-          raytrace_max_range: 15.0
-          raytrace_min_range: 0.0      # 1.0 -> 0.0: allow raytrace clearing to erase stale marks near footprint
-          obstacle_max_range: 12.0
-          obstacle_min_range: 0.0
-      # static_layer: not used in local costmap (rolling window, obstacle-only).
-      # costmap. Cuts serialization/publish load that was starving the
-      # controller loop (2.2 Hz -> target).
+      width: 6
+      height: 6
+      resolution: 0.2              # coarse: not used for navigation
+      robot_radius: 0.7
+      plugins: []                   # NO obstacle layers — APF handles avoidance
       always_send_full_costmap: false
 
 global_costmap:

@@ -1,0 +1,9 @@
+<library path="apf_controller">
+  <class type="bot_navigation::APFController" base_class_type="nav2_core::Controller">
+    <description>
+      Reactive APF controller for desert UGV navigation.
+      Reads raw 3D LiDAR and IMU directly — no costmap collision detection.
+      Three force components: goal attraction, obstacle repulsion, slope avoidance.
+    </description>
+  </class>
+</library>

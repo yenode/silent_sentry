@@ -12,11 +12,15 @@
   <depend>rclcpp</depend>
   <depend>behaviortree_cpp</depend>
   <depend>nav2_behavior_tree</depend>
+  <depend>nav2_core</depend>
+  <depend>nav2_costmap_2d</depend>
+  <depend>nav2_util</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
+  <depend>pluginlib</depend>
   <depend>tf_transformations</depend>
   <depend>slam_toolbox</depend>
   <depend>nav2_bringup</depend>
