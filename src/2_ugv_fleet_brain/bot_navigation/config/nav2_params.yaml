@@ -168,11 +168,21 @@ controller_server:
       wheelbase: 0.9                # L (m)
 
       # Sensor inputs (subscribed directly, not through costmap)
-      scan_topic: "/scan/points"    # raw 3D LiDAR
-      imu_topic: "/imu"             # IMU for pitch
-      obstacle_height_min: 0.15     # ignore ground (m in sensor frame)
+      # /scan/obstacles is pre-filtered by ugv_obstacle: dune slope ground
+      # returns are already removed via DEM-prior differencing. Only genuine
+      # obstacles (rocks, bushes, vehicles) remain in this cloud.
+      scan_topic: "/scan/obstacles"
+      imu_topic: "/imu"             # IMU for pitch/slope detection
+      obstacle_height_min: 0.15     # absolute min height to be an obstacle (m)
       obstacle_height_max: 2.0      # ignore high returns (m)
       obstacle_range_max: 8.0       # ignore distant points (m)
+
+      # Per-sector adaptive ground clearance: only points whose z exceeds the
+      # per-sector ground estimate by this amount are treated as obstacles.
+      # Catches leaked ground points that passed ugv_obstacle at low TRN
+      # confidence or close range. On a slope, sector ground rises with the
+      # terrain so slope returns are naturally filtered out.
+      ground_clearance: 0.3         # height above sector ground → obstacle (m)
 
       transform_tolerance: 2.0
 

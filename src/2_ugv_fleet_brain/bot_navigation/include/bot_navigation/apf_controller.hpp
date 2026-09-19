@@ -111,7 +111,8 @@ class APFController : public nav2_core::Controller {
   double obstacle_height_min_{0.15};   // above base_footprint z
   double obstacle_height_max_{2.0};
   double obstacle_range_max_{8.0};     // only consider obstacles within this range
-  std::string scan_topic_{"/scan/points"};
+  double ground_clearance_{0.3};       // height above per-sector ground estimate to count as obstacle
+  std::string scan_topic_{"/scan/obstacles"};  // pre-filtered by ugv_obstacle
   std::string imu_topic_{"/imu"};
 
   // Speed limit override

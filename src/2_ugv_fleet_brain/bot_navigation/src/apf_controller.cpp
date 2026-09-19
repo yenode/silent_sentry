@@ -1,7 +1,16 @@
 // APF Controller implementation.
 //
-// Reactive obstacle avoidance via Artificial Potential Fields. Reads raw 3D
-// LiDAR (projected to 2D) and IMU pitch directly — no costmap is consulted.
+// Reactive obstacle avoidance via Artificial Potential Fields. No costmap is
+// consulted — the controller reads sensors directly.
+//
+// Obstacle input: /scan/obstacles (pre-filtered by ugv_obstacle via DEM-prior
+// ground segmentation). This cloud already has dune/slope ground returns
+// removed; only genuine obstacles (rocks, bushes, vehicles) remain.
+//
+// Secondary safety net: per-sector adaptive ground estimation. Even after
+// ugv_obstacle filtering, edge cases (low TRN confidence, close range) can
+// leak ground points. For each angular sector around the robot, we find the
+// lowest z point (ground proxy) and only count points significantly above it.
 //
 // Force model:
 //   F_total = F_attractive(goal) + Σ F_repulsive(obstacles) + F_slope(IMU pitch)
@@ -12,6 +21,7 @@
 #include "bot_navigation/apf_controller.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -22,6 +32,12 @@
 #include <tf2/utils.h>
 
 namespace bot_navigation {
+
+// Number of angular sectors for per-sector ground estimation.
+// 36 sectors = 10° each. Enough resolution to separate a narrow rock from
+// the surrounding slope while keeping computation trivial.
+static constexpr int NUM_SECTORS = 36;
+static constexpr double SECTOR_WIDTH = 2.0 * M_PI / NUM_SECTORS;
 
 void APFController::configure(
     const rclcpp_lifecycle::LifecycleNode::WeakPtr & parent,
@@ -59,8 +75,10 @@ void APFController::configure(
     rclcpp::ParameterValue(2.0));
   nav2_util::declare_parameter_if_not_declared(node, name + ".obstacle_range_max",
     rclcpp::ParameterValue(8.0));
+  nav2_util::declare_parameter_if_not_declared(node, name + ".ground_clearance",
+    rclcpp::ParameterValue(0.3));
   nav2_util::declare_parameter_if_not_declared(node, name + ".scan_topic",
-    rclcpp::ParameterValue(std::string("/scan/points")));
+    rclcpp::ParameterValue(std::string("/scan/obstacles")));
   nav2_util::declare_parameter_if_not_declared(node, name + ".imu_topic",
     rclcpp::ParameterValue(std::string("/imu")));
   nav2_util::declare_parameter_if_not_declared(node, name + ".transform_tolerance",
@@ -77,6 +95,7 @@ void APFController::configure(
   node->get_parameter(name + ".obstacle_height_min", obstacle_height_min_);
   node->get_parameter(name + ".obstacle_height_max", obstacle_height_max_);
   node->get_parameter(name + ".obstacle_range_max", obstacle_range_max_);
+  node->get_parameter(name + ".ground_clearance", ground_clearance_);
   node->get_parameter(name + ".scan_topic", scan_topic_);
   node->get_parameter(name + ".imu_topic", imu_topic_);
   node->get_parameter(name + ".transform_tolerance", transform_tolerance_);
@@ -85,23 +104,27 @@ void APFController::configure(
   max_steer_angle_ = std::atan(wheelbase_ / min_turning_radius_);
 
   RCLCPP_INFO(logger_, "APFController configured: k_att=%.2f k_rep=%.2f d0=%.1fm "
-              "k_slope=%.2f pitch_thresh=%.1f° max_vel=%.2f R_min=%.2fm δ_max=%.1f°",
+              "k_slope=%.2f pitch_thresh=%.1f° max_vel=%.2f R_min=%.2fm δ_max=%.1f° "
+              "ground_clearance=%.2fm scan=%s",
               k_att_, k_rep_, influence_distance_,
               k_slope_, pitch_threshold_ * 180.0 / M_PI,
               max_linear_vel_, min_turning_radius_,
-              max_steer_angle_ * 180.0 / M_PI);
+              max_steer_angle_ * 180.0 / M_PI,
+              ground_clearance_, scan_topic_.c_str());
 }
 
 void APFController::activate() {
   auto node = node_.lock();
   if (!node) return;
 
-  // Subscribe to raw 3D LiDAR
+  // Subscribe to obstacle-filtered point cloud (ground already removed by
+  // ugv_obstacle via DEM-prior differencing). Falls back gracefully if the
+  // topic is raw /scan/points — the per-sector ground filter handles it.
   scan_sub_ = node->create_subscription<sensor_msgs::msg::PointCloud2>(
     scan_topic_, rclcpp::SensorDataQoS(),
     std::bind(&APFController::scanCallback, this, std::placeholders::_1));
 
-  // Subscribe to IMU for pitch
+  // Subscribe to IMU for slope/pitch detection
   imu_sub_ = node->create_subscription<sensor_msgs::msg::Imu>(
     imu_topic_, rclcpp::SensorDataQoS(),
     std::bind(&APFController::imuCallback, this, std::placeholders::_1));
@@ -145,7 +168,6 @@ void APFController::scanCallback(const sensor_msgs::msg::PointCloud2::SharedPtr 
 void APFController::imuCallback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   // Extract pitch from IMU quaternion
   const auto & q = msg->orientation;
-  // pitch = asin(2*(qw*qy - qz*qx))
   double siny_cosp = 2.0 * (q.w * q.x + q.y * q.z);
   double cosy_cosp = 1.0 - 2.0 * (q.x * q.x + q.y * q.y);
   double roll = std::atan2(siny_cosp, cosy_cosp);
@@ -207,16 +229,15 @@ geometry_msgs::msg::TwistStamped APFController::computeVelocityCommands(
   Vec2 f_slope = computeSlopeForce(pitch);
 
   // ---- Sum forces ----
-  // f_att and f_rep are in map frame; f_slope is in robot frame.
-  // Convert f_slope to map frame.
-  Vec2 f_slope_map;
-  f_slope_map.x = f_slope.x * std::cos(ryaw) - f_slope.y * std::sin(ryaw);
-  f_slope_map.y = f_slope.x * std::sin(ryaw) + f_slope.y * std::cos(ryaw);
-
-  // Also convert f_rep from robot frame to map frame
+  // f_att is in map frame; f_rep and f_slope are in robot frame.
+  // Convert f_rep and f_slope to map frame.
   Vec2 f_rep_map;
   f_rep_map.x = f_rep.x * std::cos(ryaw) - f_rep.y * std::sin(ryaw);
   f_rep_map.y = f_rep.x * std::sin(ryaw) + f_rep.y * std::cos(ryaw);
+
+  Vec2 f_slope_map;
+  f_slope_map.x = f_slope.x * std::cos(ryaw) - f_slope.y * std::sin(ryaw);
+  f_slope_map.y = f_slope.x * std::sin(ryaw) + f_slope.y * std::cos(ryaw);
 
   Vec2 f_total;
   f_total.x = f_att.x + f_rep_map.x + f_slope_map.x;
@@ -232,7 +253,6 @@ geometry_msgs::msg::TwistStamped APFController::computeVelocityCommands(
   // Clamp steering angle to Ackermann limits
   double steer = std::clamp(desired_heading, -max_steer_angle_, max_steer_angle_);
 
-  // Angular velocity from Ackermann: ω = v * tan(δ) / L
   // Velocity scales with:
   //   - cos(heading_error): slow down for large heading corrections
   //   - proximity to obstacles: natural from force magnitude
@@ -261,6 +281,7 @@ geometry_msgs::msg::TwistStamped APFController::computeVelocityCommands(
     linear_vel = 0.05;
   }
 
+  // Angular velocity from Ackermann: ω = v * tan(δ) / L
   double angular_vel = linear_vel * std::tan(steer) / wheelbase_;
 
   cmd.twist.linear.x = linear_vel;
@@ -306,8 +327,6 @@ APFController::Vec2 APFController::computeRepulsive(
     double mag = k_rep_ * (inv_d - inv_d0) * inv_d * inv_d;
 
     // Direction: from obstacle toward robot (i.e., away from obstacle)
-    // In robot frame, obstacle is at (obs.x, obs.y), so push direction
-    // is (-obs.x, -obs.y) normalized
     double nx = -obs.x / dist;
     double ny = -obs.y / dist;
 
@@ -326,35 +345,53 @@ APFController::Vec2 APFController::computeSlopeForce(double pitch) const {
 
   // Backward force proportional to how much pitch exceeds threshold
   double mag = k_slope_ * excess;
-  // Push backward in robot frame (negative x)
   return {-mag, 0.0};
 }
 
-// ---- Obstacle Extraction ----
+// ---- Obstacle Extraction with Per-Sector Adaptive Ground ----
 
 std::vector<APFController::Vec2> APFController::extractObstacles2D(
     const sensor_msgs::msg::PointCloud2 & cloud) const {
-  std::vector<Vec2> obstacles;
+  // Two-pass obstacle extraction with per-sector ground estimation.
+  //
+  // The input is /scan/obstacles from ugv_obstacle, which has already removed
+  // dune slope ground returns via DEM-prior differencing. However, edge cases
+  // (low TRN confidence, close range, DEM position error) can leak ground
+  // points through. This secondary filter catches those leaks.
+  //
+  // Pass 1: For each of 36 angular sectors (10° each), find the minimum z
+  //         value — this is the local ground estimate for that sector.
+  //
+  // Pass 2: Only accept points whose z exceeds the sector ground estimate
+  //         by more than ground_clearance_ (0.3m). On a dune slope, the
+  //         sector ground rises with the slope, so slope returns at z = 0.5m
+  //         are NOT treated as obstacles when the sector ground is at 0.3m
+  //         (0.5 - 0.3 = 0.2 < 0.3 → filtered out).
+  //
+  // This adaptive threshold naturally handles any terrain gradient because
+  // the ground reference moves with the terrain shape.
 
-  // The point cloud comes in the sensor frame (laser_link). We use the raw
-  // (x, y, z) in sensor frame and filter by height band. Since laser_link
-  // is roughly horizontal and mounted on the robot chassis, the z-axis
-  // in sensor frame roughly corresponds to vertical.
-  //
-  // Points between obstacle_height_min_ and obstacle_height_max_ (in sensor z)
-  // are projected to 2D (x, y) as obstacle positions in sensor/robot frame.
-  //
-  // Note: sensor frame ≈ robot frame for our purposes (small offset). For a
-  // precise implementation we'd transform to base_footprint, but the latency
-  // savings of using raw sensor frame are worth the ~0.5m offset.
+  struct SectorPoint {
+    float x, y, z;
+    double range2;
+  };
+
+  // Collect all valid points and assign to sectors
+  std::array<float, NUM_SECTORS> sector_min_z;
+  sector_min_z.fill(std::numeric_limits<float>::infinity());
+
+  std::vector<SectorPoint> all_points;
+  std::vector<int> point_sectors;
+
+  const double range_max2 = obstacle_range_max_ * obstacle_range_max_;
+  const double range_min2 = 0.5 * 0.5;  // self-returns exclusion
 
   sensor_msgs::PointCloud2ConstIterator<float> iter_x(cloud, "x");
   sensor_msgs::PointCloud2ConstIterator<float> iter_y(cloud, "y");
   sensor_msgs::PointCloud2ConstIterator<float> iter_z(cloud, "z");
 
-  const double range_max2 = obstacle_range_max_ * obstacle_range_max_;
-
-  obstacles.reserve(cloud.width * cloud.height / 10);  // rough estimate
+  all_points.reserve(cloud.width * cloud.height / 4);
+  point_sectors.reserve(cloud.width * cloud.height / 4);
 
   for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
     const float x = *iter_x;
@@ -364,14 +401,51 @@ std::vector<APFController::Vec2> APFController::extractObstacles2D(
     // Skip NaN
     if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) continue;
 
-    // Height band filter (in sensor frame, z is roughly vertical)
-    if (z < obstacle_height_min_ || z > obstacle_height_max_) continue;
+    // Coarse height filter: reject points clearly above or below any
+    // possible obstacle/ground. This is a wide band — the per-sector
+    // ground filter does the precise work.
+    if (z < -3.0f || z > obstacle_height_max_) continue;
 
     // Range filter
     double r2 = static_cast<double>(x) * x + static_cast<double>(y) * y;
-    if (r2 > range_max2 || r2 < 0.5 * 0.5) continue;  // skip self-returns < 0.5m
+    if (r2 > range_max2 || r2 < range_min2) continue;
 
-    obstacles.push_back({static_cast<double>(x), static_cast<double>(y)});
+    // Determine angular sector (atan2 returns [-π, π])
+    double angle = std::atan2(static_cast<double>(y), static_cast<double>(x));
+    int sector = static_cast<int>((angle + M_PI) / SECTOR_WIDTH);
+    sector = std::clamp(sector, 0, NUM_SECTORS - 1);
+
+    all_points.push_back({x, y, z, r2});
+    point_sectors.push_back(sector);
+
+    // Pass 1: track minimum z per sector (ground proxy)
+    if (z < sector_min_z[sector]) {
+      sector_min_z[sector] = z;
+    }
+  }
+
+  // Pass 2: accept only points significantly above sector ground
+  std::vector<Vec2> obstacles;
+  obstacles.reserve(all_points.size() / 4);
+
+  for (size_t i = 0; i < all_points.size(); ++i) {
+    const auto & pt = all_points[i];
+    const int sector = point_sectors[i];
+    const float ground_z = sector_min_z[sector];
+
+    // If sector has no ground reference (shouldn't happen), fall back
+    // to absolute height band
+    float threshold = std::isfinite(ground_z)
+      ? ground_z + static_cast<float>(ground_clearance_)
+      : static_cast<float>(obstacle_height_min_);
+
+    // Point must be ABOVE the adaptive ground + clearance threshold
+    if (pt.z < threshold) continue;
+
+    // Also enforce the absolute minimum height (belt-and-suspenders)
+    if (pt.z < obstacle_height_min_) continue;
+
+    obstacles.push_back({static_cast<double>(pt.x), static_cast<double>(pt.y)});
   }
 
   return obstacles;
