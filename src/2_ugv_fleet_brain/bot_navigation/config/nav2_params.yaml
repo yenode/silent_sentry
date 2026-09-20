@@ -167,15 +167,34 @@ controller_server:
       min_turning_radius: 3.36      # R_min (m)
       wheelbase: 0.9                # L (m)
 
+      # Sensor geometry — from URDF TF chain:
+      #   base_footprint → base_link (+0.175z)
+      #     → lidar_mast (+0.2075z, +0.60x)
+      #       → lidar_base (+0.431z)
+      #         → laser_link (+0.027z)
+      #   Total: laser_link is at z=0.84m, x=0.60m above/forward of base_footprint
+      #
+      # Points in /scan/obstacles are in laser_link frame, where:
+      #   ground = z ≈ -0.84m,  a 0.3m rock = z ≈ -0.54m
+      # The controller converts height thresholds (specified in meters above
+      # ground) to sensor frame internally using these offsets.
+      sensor_height: 0.84            # laser_link z above ground (m)
+      sensor_x_offset: 0.60          # laser_link x forward of base_footprint (m)
+
       # Sensor inputs (subscribed directly, not through costmap)
       # /scan/obstacles is pre-filtered by ugv_obstacle: dune slope ground
       # returns are already removed via DEM-prior differencing. Only genuine
       # obstacles (rocks, bushes, vehicles) remain in this cloud.
       scan_topic: "/scan/obstacles"
       imu_topic: "/imu"             # IMU for pitch/slope detection
-      obstacle_height_min: 0.15     # absolute min height to be an obstacle (m)
-      obstacle_height_max: 2.0      # ignore high returns (m)
-      obstacle_range_max: 8.0       # ignore distant points (m)
+
+      # Obstacle height thresholds in GROUND frame (meters above ground).
+      # Internally converted: z_sensor = z_ground - sensor_height
+      #   0.15m above ground → z_sensor = 0.15 - 0.84 = -0.69 (a 15cm rock)
+      #   2.0m above ground  → z_sensor = 2.0 - 0.84  = +1.16
+      obstacle_height_min: 0.15     # min obstacle height above ground (m)
+      obstacle_height_max: 2.0      # max obstacle height above ground (m)
+      obstacle_range_max: 8.0       # max range from base_footprint center (m)
 
       # Per-sector adaptive ground clearance: only points whose z exceeds the
       # per-sector ground estimate by this amount are treated as obstacles.

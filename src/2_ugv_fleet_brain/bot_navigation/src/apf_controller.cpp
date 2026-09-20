@@ -7,16 +7,16 @@
 // ground segmentation). This cloud already has dune/slope ground returns
 // removed; only genuine obstacles (rocks, bushes, vehicles) remain.
 //
-// Secondary safety net: per-sector adaptive ground estimation. Even after
-// ugv_obstacle filtering, edge cases (low TRN confidence, close range) can
-// leak ground points. For each angular sector around the robot, we find the
-// lowest z point (ground proxy) and only count points significantly above it.
+// CRITICAL: The point cloud is in sensor frame (laser_link), which is mounted
+// at (x=0.60, z=0.84) above base_footprint. All height thresholds are
+// specified in "meters above ground" and internally converted to sensor frame:
+//     z_sensor = z_ground - sensor_height_
+//
+// Secondary safety net: per-sector adaptive ground estimation catches leaked
+// ground points from ugv_obstacle edge cases (low TRN confidence, close range).
 //
 // Force model:
 //   F_total = F_attractive(goal) + Σ F_repulsive(obstacles) + F_slope(IMU pitch)
-//
-// The resultant force vector is converted to an Ackermann-compatible Twist
-// (linear.x, angular.z) respecting minimum turning radius.
 
 #include "bot_navigation/apf_controller.hpp"
 
@@ -69,6 +69,12 @@ void APFController::configure(
     rclcpp::ParameterValue(3.36));
   nav2_util::declare_parameter_if_not_declared(node, name + ".wheelbase",
     rclcpp::ParameterValue(0.9));
+  // Sensor geometry from URDF
+  nav2_util::declare_parameter_if_not_declared(node, name + ".sensor_height",
+    rclcpp::ParameterValue(0.84));
+  nav2_util::declare_parameter_if_not_declared(node, name + ".sensor_x_offset",
+    rclcpp::ParameterValue(0.60));
+  // Obstacle height thresholds — in meters above GROUND (not sensor frame)
   nav2_util::declare_parameter_if_not_declared(node, name + ".obstacle_height_min",
     rclcpp::ParameterValue(0.15));
   nav2_util::declare_parameter_if_not_declared(node, name + ".obstacle_height_max",
@@ -92,6 +98,8 @@ void APFController::configure(
   node->get_parameter(name + ".max_linear_vel", max_linear_vel_);
   node->get_parameter(name + ".min_turning_radius", min_turning_radius_);
   node->get_parameter(name + ".wheelbase", wheelbase_);
+  node->get_parameter(name + ".sensor_height", sensor_height_);
+  node->get_parameter(name + ".sensor_x_offset", sensor_x_offset_);
   node->get_parameter(name + ".obstacle_height_min", obstacle_height_min_);
   node->get_parameter(name + ".obstacle_height_max", obstacle_height_max_);
   node->get_parameter(name + ".obstacle_range_max", obstacle_range_max_);
@@ -103,14 +111,19 @@ void APFController::configure(
   // Compute max steering angle from Ackermann geometry: δ_max = atan(L / R_min)
   max_steer_angle_ = std::atan(wheelbase_ / min_turning_radius_);
 
-  RCLCPP_INFO(logger_, "APFController configured: k_att=%.2f k_rep=%.2f d0=%.1fm "
-              "k_slope=%.2f pitch_thresh=%.1f° max_vel=%.2f R_min=%.2fm δ_max=%.1f° "
-              "ground_clearance=%.2fm scan=%s",
-              k_att_, k_rep_, influence_distance_,
-              k_slope_, pitch_threshold_ * 180.0 / M_PI,
-              max_linear_vel_, min_turning_radius_,
-              max_steer_angle_ * 180.0 / M_PI,
-              ground_clearance_, scan_topic_.c_str());
+  RCLCPP_INFO(logger_, "APFController configured:");
+  RCLCPP_INFO(logger_, "  Forces: k_att=%.2f k_rep=%.2f d0=%.1fm k_slope=%.2f pitch_thresh=%.1f°",
+              k_att_, k_rep_, influence_distance_, k_slope_, pitch_threshold_ * 180.0 / M_PI);
+  RCLCPP_INFO(logger_, "  Ackermann: max_vel=%.2f R_min=%.2fm L=%.2fm δ_max=%.1f°",
+              max_linear_vel_, min_turning_radius_, wheelbase_, max_steer_angle_ * 180.0 / M_PI);
+  RCLCPP_INFO(logger_, "  Sensor: height=%.2fm x_offset=%.2fm scan=%s",
+              sensor_height_, sensor_x_offset_, scan_topic_.c_str());
+  RCLCPP_INFO(logger_, "  Obstacle: h_min=%.2fm h_max=%.2fm (above ground) → "
+              "z_sensor=[%.2f, %.2f] ground_clearance=%.2fm",
+              obstacle_height_min_, obstacle_height_max_,
+              obstacle_height_min_ - sensor_height_,
+              obstacle_height_max_ - sensor_height_,
+              ground_clearance_);
 }
 
 void APFController::activate() {
@@ -210,7 +223,7 @@ geometry_msgs::msg::TwistStamped APFController::computeVelocityCommands(
   // ---- 1. Attractive force (in map frame) ----
   Vec2 f_att = computeAttractive(rx, ry, gx, gy);
 
-  // ---- 2. Repulsive force (from obstacles in robot frame) ----
+  // ---- 2. Repulsive force (from obstacles, returned in base_footprint frame) ----
   std::vector<Vec2> obs_robot;
   {
     std::lock_guard<std::mutex> lock(scan_mutex_);
@@ -220,7 +233,7 @@ geometry_msgs::msg::TwistStamped APFController::computeVelocityCommands(
   }
   Vec2 f_rep = computeRepulsive(rx, ry, ryaw, obs_robot);
 
-  // ---- 3. Slope force (from IMU) ----
+  // ---- 3. Slope force (from IMU, in robot frame) ----
   double pitch;
   {
     std::lock_guard<std::mutex> lock(imu_mutex_);
@@ -354,26 +367,37 @@ std::vector<APFController::Vec2> APFController::extractObstacles2D(
     const sensor_msgs::msg::PointCloud2 & cloud) const {
   // Two-pass obstacle extraction with per-sector ground estimation.
   //
-  // The input is /scan/obstacles from ugv_obstacle, which has already removed
-  // dune slope ground returns via DEM-prior differencing. However, edge cases
-  // (low TRN confidence, close range, DEM position error) can leak ground
-  // points through. This secondary filter catches those leaks.
+  // IMPORTANT: The point cloud is in SENSOR FRAME (laser_link), which is
+  // mounted at z = sensor_height_ (0.84m) above ground and x = sensor_x_offset_
+  // (0.60m) forward of base_footprint center.
   //
-  // Pass 1: For each of 36 angular sectors (10° each), find the minimum z
-  //         value — this is the local ground estimate for that sector.
+  // In sensor frame:
+  //   - Flat ground appears at z ≈ -sensor_height_ (-0.84m)
+  //   - A 0.3m rock appears at z ≈ 0.3 - sensor_height_ = -0.54m
+  //   - A 1.0m bush appears at z ≈ 1.0 - sensor_height_ = +0.16m
   //
-  // Pass 2: Only accept points whose z exceeds the sector ground estimate
-  //         by more than ground_clearance_ (0.3m). On a dune slope, the
-  //         sector ground rises with the slope, so slope returns at z = 0.5m
-  //         are NOT treated as obstacles when the sector ground is at 0.3m
-  //         (0.5 - 0.3 = 0.2 < 0.3 → filtered out).
+  // obstacle_height_min/max are specified in "meters above ground" and
+  // converted to sensor frame here:
+  //   z_sensor_min = obstacle_height_min_ - sensor_height_
+  //   z_sensor_max = obstacle_height_max_ - sensor_height_
   //
-  // This adaptive threshold naturally handles any terrain gradient because
-  // the ground reference moves with the terrain shape.
+  // The sensor x-offset is added to each point's x to convert from
+  // sensor frame to approximate base_footprint frame for the 2D obstacle
+  // positions used by the repulsive force computation.
+  //
+  // Pass 1: For each angular sector, find minimum z → ground proxy
+  // Pass 2: Accept points whose z > sector_ground + ground_clearance
+
+  // Convert height thresholds from ground frame to sensor frame
+  const float z_sensor_min = static_cast<float>(obstacle_height_min_ - sensor_height_);
+  const float z_sensor_max = static_cast<float>(obstacle_height_max_ - sensor_height_);
+  // Ground level in sensor frame (used for coarse pre-filter)
+  const float z_ground_sensor = static_cast<float>(-sensor_height_);
 
   struct SectorPoint {
-    float x, y, z;
-    double range2;
+    float x, y, z;    // in sensor frame
+    float bx, by;     // in base_footprint frame (2D)
+    double range2;     // 2D range from base_footprint center
   };
 
   // Collect all valid points and assign to sectors
@@ -384,7 +408,7 @@ std::vector<APFController::Vec2> APFController::extractObstacles2D(
   std::vector<int> point_sectors;
 
   const double range_max2 = obstacle_range_max_ * obstacle_range_max_;
-  const double range_min2 = 0.5 * 0.5;  // self-returns exclusion
+  const double range_min2 = 0.5 * 0.5;  // self-returns exclusion (from base_footprint center)
 
   sensor_msgs::PointCloud2ConstIterator<float> iter_x(cloud, "x");
   sensor_msgs::PointCloud2ConstIterator<float> iter_y(cloud, "y");
@@ -394,33 +418,39 @@ std::vector<APFController::Vec2> APFController::extractObstacles2D(
   point_sectors.reserve(cloud.width * cloud.height / 4);
 
   for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
-    const float x = *iter_x;
-    const float y = *iter_y;
-    const float z = *iter_z;
+    const float sx = *iter_x;  // sensor frame x
+    const float sy = *iter_y;  // sensor frame y
+    const float sz = *iter_z;  // sensor frame z
 
     // Skip NaN
-    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) continue;
+    if (!std::isfinite(sx) || !std::isfinite(sy) || !std::isfinite(sz)) continue;
 
-    // Coarse height filter: reject points clearly above or below any
-    // possible obstacle/ground. This is a wide band — the per-sector
-    // ground filter does the precise work.
-    if (z < -3.0f || z > obstacle_height_max_) continue;
+    // Coarse height filter in sensor frame:
+    // Reject points clearly below ground (z < ground - 1m margin) or above max
+    if (sz < z_ground_sensor - 1.0f || sz > z_sensor_max) continue;
 
-    // Range filter
-    double r2 = static_cast<double>(x) * x + static_cast<double>(y) * y;
+    // Convert to approximate base_footprint frame (2D):
+    //   bx = sensor_x + sensor_x_offset  (LiDAR is forward of center)
+    //   by = sensor_y                      (LiDAR is on centerline)
+    const float bx = sx + static_cast<float>(sensor_x_offset_);
+    const float by = sy;
+
+    // Range filter from base_footprint center
+    double r2 = static_cast<double>(bx) * bx + static_cast<double>(by) * by;
     if (r2 > range_max2 || r2 < range_min2) continue;
 
-    // Determine angular sector (atan2 returns [-π, π])
-    double angle = std::atan2(static_cast<double>(y), static_cast<double>(x));
+    // Determine angular sector using base_footprint coordinates
+    // (so sectors are relative to robot heading, not sensor position)
+    double angle = std::atan2(static_cast<double>(by), static_cast<double>(bx));
     int sector = static_cast<int>((angle + M_PI) / SECTOR_WIDTH);
     sector = std::clamp(sector, 0, NUM_SECTORS - 1);
 
-    all_points.push_back({x, y, z, r2});
+    all_points.push_back({sx, sy, sz, bx, by, r2});
     point_sectors.push_back(sector);
 
-    // Pass 1: track minimum z per sector (ground proxy)
-    if (z < sector_min_z[sector]) {
-      sector_min_z[sector] = z;
+    // Pass 1: track minimum z per sector (ground proxy, in sensor frame)
+    if (sz < sector_min_z[sector]) {
+      sector_min_z[sector] = sz;
     }
   }
 
@@ -433,19 +463,20 @@ std::vector<APFController::Vec2> APFController::extractObstacles2D(
     const int sector = point_sectors[i];
     const float ground_z = sector_min_z[sector];
 
-    // If sector has no ground reference (shouldn't happen), fall back
-    // to absolute height band
+    // Adaptive threshold: sector ground + ground_clearance (in sensor frame)
     float threshold = std::isfinite(ground_z)
       ? ground_z + static_cast<float>(ground_clearance_)
-      : static_cast<float>(obstacle_height_min_);
+      : z_sensor_min;
 
     // Point must be ABOVE the adaptive ground + clearance threshold
     if (pt.z < threshold) continue;
 
     // Also enforce the absolute minimum height (belt-and-suspenders)
-    if (pt.z < obstacle_height_min_) continue;
+    // This is in sensor frame: z_sensor_min = obstacle_height_min - sensor_height
+    if (pt.z < z_sensor_min) continue;
 
-    obstacles.push_back({static_cast<double>(pt.x), static_cast<double>(pt.y)});
+    // Output in base_footprint 2D frame (for repulsive force computation)
+    obstacles.push_back({static_cast<double>(pt.bx), static_cast<double>(pt.by)});
   }
 
   return obstacles;

@@ -1,13 +1,24 @@
 // Artificial Potential Field (APF) controller plugin for Nav2.
 //
 // Replaces RPP + costmap collision detection with a reactive controller that
-// reads raw 3D LiDAR and IMU directly. Three force components:
+// reads pre-filtered 3D LiDAR (/scan/obstacles) and IMU directly.
+//
+// Three force components:
 //   1. Attractive: unit vector toward goal
 //   2. Repulsive: inverse-square push from nearby obstacle points (2D projected)
 //   3. Slope: IMU pitch-based repulsion to avoid non-traversable dunes
 //
 // Resultant force is converted to Ackermann-compatible (v, δ) with min turning
 // radius constraint. No costmap is consulted.
+//
+// SENSOR FRAME GEOMETRY (from URDF):
+//   laser_link is at (x=0.60, z=0.84) relative to base_footprint.
+//   The /scan/obstacles cloud is in laser_link frame, so:
+//     - z=0 in sensor frame = 0.84m above ground
+//     - z=-0.84 in sensor frame = ground level
+//     - A 0.3m rock on flat ground → z ≈ -0.54 in sensor frame
+//   All height thresholds must be in sensor frame (z_sensor = z_ground - 0.84).
+//   The sensor_height parameter captures this offset.
 #ifndef BOT_NAVIGATION__APF_CONTROLLER_HPP_
 #define BOT_NAVIGATION__APF_CONTROLLER_HPP_
 
@@ -107,11 +118,24 @@ class APFController : public nav2_core::Controller {
   double wheelbase_{0.9};
   double max_steer_angle_;             // computed from wheelbase / min_turning_radius
 
-  // Sensor filtering
-  double obstacle_height_min_{0.15};   // above base_footprint z
-  double obstacle_height_max_{2.0};
+  // Sensor geometry — height of laser_link above ground level.
+  // From URDF: base_footprint → base_link (+0.175) → lidar_mast (+0.2075)
+  //            → lidar_base (+0.431) → laser_link (+0.027) = 0.8405m total.
+  // In sensor frame: ground is at z = -sensor_height_.
+  // A rock of height h_rock (above ground) appears at z = h_rock - sensor_height_.
+  double sensor_height_{0.84};
+
+  // Sensor x-offset from base_footprint center.
+  // From URDF: lidar_mast is at x=0.60 from base_link ≈ base_footprint.
+  // Points in sensor frame must be shifted by this offset to get base_footprint x.
+  double sensor_x_offset_{0.60};
+
+  // Sensor filtering — thresholds in GROUND frame (meters above ground).
+  // Internally converted to sensor frame using sensor_height_.
+  double obstacle_height_min_{0.15};   // min obstacle height above ground (m)
+  double obstacle_height_max_{2.0};    // max obstacle height above ground (m)
   double obstacle_range_max_{8.0};     // only consider obstacles within this range
-  double ground_clearance_{0.3};       // height above per-sector ground estimate to count as obstacle
+  double ground_clearance_{0.3};       // height above per-sector ground for adaptive filter
   std::string scan_topic_{"/scan/obstacles"};  // pre-filtered by ugv_obstacle
   std::string imu_topic_{"/imu"};
 
