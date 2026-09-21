@@ -222,7 +222,12 @@ local_costmap:
       height: 6
       resolution: 0.2              # coarse: not used for navigation
       robot_radius: 0.7
-      plugins: []                   # NO obstacle layers — APF handles avoidance
+      # Nav2 Jazzy requires at least one plugin — empty list [] crashes.
+      # Use a static_layer with no map file: it initializes but marks nothing.
+      plugins: ["static_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        enabled: false              # disabled = no data loaded, no cells marked
       always_send_full_costmap: false
 
 global_costmap:
