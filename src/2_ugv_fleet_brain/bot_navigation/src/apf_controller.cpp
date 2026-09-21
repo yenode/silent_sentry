@@ -272,8 +272,6 @@ geometry_msgs::msg::TwistStamped APFController::computeVelocityCommands(
   double f_mag = std::sqrt(fx_robot * fx_robot + fy_robot * fy_robot);
   double heading_factor = std::max(0.0, std::cos(desired_heading));
 
-  // If the goal is directly behind (heading error > 90°), stop and let the
-  // Ackermann arc bring us around rather than reversing.
   double linear_vel = max_linear_vel_ * heading_factor;
 
   // Apply speed limit override if set
@@ -289,9 +287,17 @@ geometry_msgs::msg::TwistStamped APFController::computeVelocityCommands(
   double vel_scale = std::min(1.0, f_mag / k_att_);
   linear_vel *= vel_scale;
 
-  // Minimum velocity to avoid getting stuck (if we have a goal and heading is OK)
-  if (heading_factor > 0.3 && linear_vel < 0.05 && f_mag > 0.1) {
-    linear_vel = 0.05;
+  // CRITICAL: Always maintain a minimum creep velocity when we have a goal.
+  // Without this, when the goal is behind the robot (heading error > 90°),
+  // cos(heading) < 0 → velocity = 0 → robot sits still forever → progress
+  // checker fires → abort loop. With a small creep velocity and max steering,
+  // the Ackermann arc slowly turns the robot toward the goal.
+  //
+  // This also prevents the progress checker from declaring "no progress" due
+  // to TRN localization drift where the goal direction fluctuates randomly.
+  constexpr double MIN_CREEP_VEL = 0.08;  // m/s — enough to satisfy progress checker
+  if (linear_vel < MIN_CREEP_VEL && f_mag > 0.05) {
+    linear_vel = MIN_CREEP_VEL;
   }
 
   // Angular velocity from Ackermann: ω = v * tan(δ) / L
