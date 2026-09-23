@@ -245,14 +245,12 @@ global_costmap:
       robot_base_frame: base_footprint
       use_sim_time: true
       footprint: "[[-0.7, -0.4], [0.7, -0.4], [0.7, 0.4], [-0.7, 0.4]]"
-      # ROLLING WINDOW: 140x140 m @0.4 m = 350x350 = ~122k cells. Half-window
-      # (70 m) now exceeds SBLP l_max (35 m) with margin, so goals always land
-      # inside the reachable window (fixes repeated "no valid path found" when
-      # l_max==half-window). 0.4 m resolution keeps the larger window real-time
-      # for Smac Hybrid-A*.
+      # ROLLING WINDOW: 320x320 m @0.4 m = 800x800 = ~640k cells. Half-window
+      # (160 m) now exceeds SBLP l_max (80 m) with margin, so goals always land
+      # inside the reachable window.
       rolling_window: true
-      width: 140
-      height: 140
+      width: 320
+      height: 320
       resolution: 0.4
       track_unknown_space: true
       # static_layer REMOVED: using it inside a rolling_window costmap causes

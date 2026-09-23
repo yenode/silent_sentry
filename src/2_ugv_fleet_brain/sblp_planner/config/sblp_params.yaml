@@ -16,12 +16,11 @@
     # every Lévy step lands outside the UGV's minimum turning circle.
     # With the defaults here, r_min = 2.5 m, so l_min >= 5 m; 6 m is safe.
     l_min: 6.0
-    # l_max MUST stay below 0.6 * global costmap half-window (140 m -> 70 m
-    # half -> 42 m cap). Was 60 m, which equalled the old half-window and put
-    # goals on the costmap boundary where no path exists.
-    l_max: 35.0
+    # l_max MUST stay below 0.6 * global costmap half-window (320 m window -> 160 m
+    # half -> 96 m cap). Set to 80.0 m for Sector B (300 x 300 m).
+    l_max: 80.0
     waypoint_tolerance: 2.0
-    waypoint_timeout_s: 30.0
+    waypoint_timeout_s: 90.0
     max_rejection_attempts: 50
     # Correlated random walk: turn angles drawn from a wrapped normal
     # centered at 0 (kinematically friendly), with an occasional isotropic
@@ -29,6 +28,5 @@
     turn_sigma_rad: 1.4          # ~80 deg std dev
     reorient_probability: 0.05
     seed: -1                     # >=0 for reproducible patrols
-    # Patrol sector polygon as a FLAT [x0, y0, x1, y1, ...] array (metres,
-    # map/odom frame). Default: 200 x 150 m centered on the odom origin.
-    geofence_polygon: [-100.0, -75.0, 100.0, -75.0, 100.0, 75.0, -100.0, 75.0]
+    # Sector B geofence polygon: 300 x 300 m centered at origin [-150, 150] x [-150, 150]
+    geofence_polygon: [-150.0, -150.0, 150.0, -150.0, 150.0, 150.0, -150.0, 150.0]
