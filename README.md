@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🛰️ Silent Sentry
+# Silent Sentry
 
 ### Autonomous GPS-Denied Patrol UGV · EMCON-Aware · Terrain-Referenced Navigation
 
-*ROS 2 Jazzy · Gazebo Harmonic · Bullet-Featherstone Physics · iSAM2 · MCL · PPO*
+*ROS 2 Jazzy · Gazebo Harmonic · Bullet-Featherstone Physics · iSAM2 · MCL*
 
 [![ROS 2 Jazzy](https://img.shields.io/badge/ROS%202-Jazzy-blue?logo=ros)](https://docs.ros.org/en/jazzy/)
 [![Gazebo Harmonic](https://img.shields.io/badge/Gazebo-Harmonic%208.11-orange?logo=gazebo)](https://gazebosim.org/)
@@ -25,7 +25,7 @@ Desert surveillance in GPS-denied, RF-contested environments. Silent Sentry is a
 
 ---
 
-## Simulation World — Thar Desert
+## Simulation World - Namib Desert
 
 <table>
 <tr>
@@ -40,7 +40,7 @@ Desert surveillance in GPS-denied, RF-contested environments. Silent Sentry is a
 </tr>
 </table>
 
-The world is a 900 × 300 m photorealistic Thar Desert corridor (WGS-84 anchored at −24.19°N / 15.64°E) with a DEM elevation range of 0–44.8 m and dense desert vegetation. Physics: **Bullet-Featherstone** reduced-coordinate dynamics.
+The world is a 900 × 300 m photorealistic Thar Desert corridor (WGS-84 anchored at −24.19°N / 15.64°E) with a DEM elevation range of 0-44.8 m and dense desert vegetation. Physics: **Bullet-Featherstone** reduced-coordinate dynamics.
 
 ---
 
@@ -95,7 +95,7 @@ TRN holds global authority (`map→odom`). The factor graph owns local authority
 
 ## The Four Novelties
 
-### 1 — Terrain-Referenced Navigation (TRN)
+### 1 - Terrain-Referenced Navigation (TRN)
 
 ```
 LiDAR point cloud
@@ -117,11 +117,11 @@ No GPS. No fiducials. Pure terrain shape. Works in dunes where GPS is jammed and
 
 Key parameters: `base_search_radius 5 m`, `min_peak_quality 0.65`, `entropy_threshold 0.8` (abort match on featureless sand), `motion_noise_xy_frac 0.15`.
 
-### 2 — EMCON-Aware Micro-Burst Comms
+### 2 - EMCON-Aware Micro-Burst Comms
 
 Continuous RF = a targeting signal. Silent Sentry uses a **connectionless, directional micro-burst topology**. The EMCON state machine gates all transmission; the base station sends elastic geo-fence updates only when the robot is in a shadow. Physical-layer silence is enforced by hardware, not protocol.
 
-### 3 — Spatially-Bounded Lévy Patrol (SBLP)
+### 3 - Spatially-Bounded Lévy Patrol (SBLP)
 
 ```
 current pose (x, y, θ)
@@ -140,7 +140,7 @@ current pose (x, y, θ)
 
 Heavy-tailed step distribution guarantees both fine-grained local search (short hops) and rare long-range jumps. Unpredictable pattern cannot be anticipated by an adversary.
 
-### 4 — RL Elastic Geo-Fencing
+### 4 - RL Elastic Geo-Fencing
 
 A PPO agent at the base station monitors breach events from the fleet and dynamically reshapes each robot's patrol sector. Multi-robot coverage is maintained even when one UGV is blocked or disabled.
 
@@ -308,8 +308,7 @@ On the current baseline (Thar Desert world, bullet-featherstone physics):
 ```bibtex
 @inproceedings{silent_sentry_2026,
   title  = {Silent Sentry: GPS-Denied Autonomous Patrol in Contested Desert Terrain},
-  author = {Pachauri, Aditya and Gupta, Sailesh and {IIIT-Allahabad}},
-  booktitle = {IEEE ICCAS 2026},
+  author = {Aditya Pachauri and {IIIT-Allahabad}},
   year   = {2026}
 }
 ```
